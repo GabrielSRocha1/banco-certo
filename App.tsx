@@ -83,13 +83,14 @@ const App: React.FC = () => {
     return { label: 'ESTÁVEL', color: 'bg-blue-600 text-white', icon: '⚖️' };
   }, [roiInLiquidity, roiInPrice, roiInTokensSupply]);
 
+  const fetchAI = async () => {
+    setLoadingAI(true);
+    const result = await getAIAnalysis(stats, scenario);
+    setAiResult(result);
+    setLoadingAI(false);
+  };
+
   useEffect(() => {
-    const fetchAI = async () => {
-      setLoadingAI(true);
-      const result = await getAIAnalysis(stats, scenario);
-      setAiResult(result);
-      setLoadingAI(false);
-    };
     fetchAI();
   }, [stats, scenario]);
 
@@ -226,9 +227,14 @@ const App: React.FC = () => {
             </div>
           </div>
           {aiResult && (
-            <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl">
-               <span className="text-[10px] font-black text-blue-400 uppercase">Insight do Analista IA</span>
-               <p className="text-xs text-blue-200 italic mt-1 leading-relaxed">"{aiResult.situacao}"</p>
+            <div className={`p-4 rounded-xl border ${aiResult.error ? 'bg-rose-900/20 border-rose-500/30' : 'bg-blue-900/20 border-blue-500/30'}`}>
+               <div className="flex justify-between items-center mb-1">
+                <span className={`text-[10px] font-black uppercase ${aiResult.error ? 'text-rose-400' : 'text-blue-400'}`}>Insight do Analista IA</span>
+                {aiResult.error && (
+                  <button onClick={fetchAI} className="text-[9px] font-black uppercase text-white bg-rose-600 px-2 py-0.5 rounded hover:bg-rose-700 transition-colors">Tentar novamente</button>
+                )}
+               </div>
+               <p className={`text-xs italic leading-relaxed mt-1 ${aiResult.error ? 'text-rose-200' : 'text-blue-200'}`}>"{aiResult.situacao}"</p>
             </div>
           )}
         </div>

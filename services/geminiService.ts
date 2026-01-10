@@ -2,9 +2,20 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { TokenStats, Scenario } from "../types";
 
-export const getAIAnalysis = async (stats: TokenStats, scenario: Scenario) => {
-  // Always initialize right before use as per guidelines
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+export const getAIAnalysis = async (stats: TokenStats, scenario: Scenario, retries = 2): Promise<any> => {
+  // Garantia de acesso à chave via process.env injetado ou polyfill
+  const apiKey = (window as any).process?.env?.API_KEY || process.env.API_KEY;
+
+  if (!apiKey) {
+    return { 
+      error: "missing_key", 
+      situacao: "Chave de API não configurada no ambiente." 
+    };
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `
     Atue como um Arquiteto de Dashboards e Gestor de Tokenomics.
@@ -48,10 +59,29 @@ export const getAIAnalysis = async (stats: TokenStats, scenario: Scenario) => {
       }
     });
 
-    // response.text is a property, not a method.
     return JSON.parse(response.text || '{}');
-  } catch (error) {
+  } catch (error: any) {
+    const isQuotaError = error?.status === 429 || 
+                        error?.message?.includes('429') || 
+                        error?.message?.includes('RESOURCE_EXHAUSTED');
+
+    if (retries > 0 && isQuotaError) {
+      await delay(2000 * (3 - retries));
+      return getAIAnalysis(stats, scenario, retries - 1);
+    }
+
     console.error("Erro na análise da IA:", error);
-    return null;
+    
+    if (isQuotaError) {
+      return { 
+        error: "quota_exceeded", 
+        situacao: "IA temporariamente indisponível (Limite de Quota atingido)." 
+      };
+    }
+
+    return { 
+      error: "generic_error", 
+      situacao: "Não foi possível gerar o insight da IA no momento." 
+    };
   }
 };
