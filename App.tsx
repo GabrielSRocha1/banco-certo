@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, Legend
 } from 'recharts';
 import { Scenario, Timeframe, AppState } from './types';
@@ -34,7 +34,7 @@ const App: React.FC = () => {
   const [state] = useState<AppState>({
     baseCurrency: 'USD',
     initialPrice: 0.10,
-    totalSupply: 2000000000, // Ajustado para 2B conforme solicitado
+    totalSupply: 2000000000, 
     initialCirculating: 20000000,
     initialLiquidityUSD: 100000,
     distTeam: 15,
@@ -49,25 +49,19 @@ const App: React.FC = () => {
     weeklyLiquidityAdd: 1000,
   });
 
-  // ROI Simulator - INPUTS AMM
+  // ROI Simulator - INPUTS INTEGRADOS
   const [roiInLiquidity, setRoiInLiquidity] = useState(50000.0);
   const [roiInTokensPool, setRoiInTokensPool] = useState(500000.0);
-  const [roiTotalSupply, setRoiTotalSupply] = useState(2000000000.0);
+  const [roiTotalSupply, setRoiTotalSupply] = useState(2000000000.0); 
   
   const [roiInMonthlyUsers, setRoiInMonthlyUsers] = useState(100);
   const [roiInTicket, setRoiInTicket] = useState(100.0);
   const [roiInMonthlyAddUSD, setRoiInMonthlyAddUSD] = useState(1000.0);
-  const [roiInMonthlyAddTokens, setRoiInMonthlyAddTokens] = useState(50000.0); // Novo campo conectado à lógica
+  const [roiInMonthlyAddTokens, setRoiInMonthlyAddTokens] = useState(50000.0); 
 
-  // Variáveis Calculadas (Read Only)
   const currentInitialPrice = useMemo(() => 
     calculatePriceFromReserves(roiInLiquidity, roiInTokensPool),
     [roiInLiquidity, roiInTokensPool]
-  );
-
-  const initialMarketCap = useMemo(() => 
-    currentInitialPrice * roiTotalSupply,
-    [currentInitialPrice, roiTotalSupply]
   );
 
   const [scenario] = useState<Scenario>(Scenario.Neutral);
@@ -75,7 +69,7 @@ const App: React.FC = () => {
   const [aiResult, setAiResult] = useState<any>(null);
   const [loadingAI, setLoadingAI] = useState(false);
 
-  // Motor Matemático x * y = k com Injeção Dinâmica
+  // Motor Matemático V4 com Linha Amarela
   const roiData = useMemo(() => 
     calculateRoiSimulation(
       roiInLiquidity,
@@ -87,6 +81,10 @@ const App: React.FC = () => {
     ), 
     [roiInLiquidity, roiInTokensPool, roiInMonthlyUsers, roiInTicket, roiInMonthlyAddUSD, roiInMonthlyAddTokens]
   );
+
+  // Market Cap Real baseado no Supply Total do Input
+  const currentPriceNeutral = roiData[roiData.length - 1][Scenario.Neutral];
+  const finalMarketCap = currentPriceNeutral * roiTotalSupply;
 
   const { stats } = useMemo(() => calculateRealisticStats(state, scenario, timeframe), [state, scenario, timeframe]);
 
@@ -102,36 +100,43 @@ const App: React.FC = () => {
   }, [scenario]);
 
   const renderRoiSimulator = () => {
-    const liqToMcRatio = (roiInLiquidity / (initialMarketCap || 1)) * 100;
-    
-    // Impacto de Preço / Alerta de Diluição
-    const priceNeutral = roiData[12][Scenario.Neutral];
-    const isDiluting = priceNeutral < currentInitialPrice;
+    const isSustainable = currentPriceNeutral >= currentInitialPrice;
 
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <div className="bg-[#1a1f2e] p-6 lg:p-8 rounded-3xl border border-slate-800 shadow-2xl relative overflow-hidden">
           
           <div className="flex flex-col md:absolute md:top-8 md:right-8 items-start md:items-end gap-2 mb-6 md:mb-0">
-             <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${liqToMcRatio > 5 ? 'bg-emerald-500' : 'bg-amber-500'} text-black shadow-lg`}>
-               <span>{liqToMcRatio > 5 ? '💎' : '⚠️'}</span>
-               {liqToMcRatio > 5 ? 'Liquidez Saudável' : 'Liquidez Baixa'}
+             <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${isSustainable ? 'bg-emerald-500' : 'bg-rose-500'} text-black shadow-lg transition-colors`}>
+               <span>{isSustainable ? '✅' : '🚨'}</span>
+               {isSustainable ? 'Modelo Sustentável' : 'Risco de Diluição'}
              </div>
-             <span className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter">Razão Liquidez/MC (FDV): {liqToMcRatio.toFixed(1)}%</span>
+             <span className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter">Market Cap FDV: {formatUSD(finalMarketCap)}</span>
           </div>
 
           <div className="flex items-center gap-3 mb-8">
             <div className="bg-blue-600 p-3 rounded-2xl text-2xl shadow-lg shadow-blue-500/20">🧠</div>
             <div>
-              <h2 className="text-xl lg:text-2xl font-black text-white uppercase tracking-tight">Simulador ROI Sniper v3.1</h2>
-              <p className="text-slate-400 text-[10px] font-medium uppercase tracking-widest opacity-70">Engine AMM v3.1 • x * y = k + Injeção Dinâmica</p>
+              <h2 className="text-xl lg:text-2xl font-black text-white uppercase tracking-tight">Simulador ROI Sniper v4.0</h2>
+              <p className="text-slate-400 text-[10px] font-medium uppercase tracking-widest opacity-70">Engine de Sustentabilidade DeFi • Linha Amarela Ativa</p>
             </div>
           </div>
 
-          {/* INPUT GRID - MANTIDO LAYOUT, APENAS CONECTADO À LÓGICA */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 mb-10">
+          {/* INPUT GRID - PREÇO INICIAL AGORA EM VERDE */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4 mb-10">
             <div className="space-y-2">
-              <label className="block text-[8px] font-black text-blue-400 uppercase tracking-widest">Liquidez Pool (y) $</label>
+              <label className="block text-[8px] font-black text-blue-400 uppercase tracking-widest">Supply Total Criado</label>
+              <input 
+                type="number" 
+                value={roiTotalSupply} 
+                onChange={e => setRoiTotalSupply(Math.max(Number(e.target.value), 1))} 
+                className="w-full bg-[#0b0e14] border border-blue-900/30 p-3.5 rounded-xl text-white font-mono font-bold text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all" 
+              />
+              <p className="text-[9px] font-mono text-slate-500 pl-1">{formatNumberWithPoints(roiTotalSupply)} tokens</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[8px] font-black text-blue-400 uppercase tracking-widest">Liquidez Pool $</label>
               <input 
                 type="number" 
                 value={roiInLiquidity} 
@@ -142,7 +147,7 @@ const App: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <label className="block text-[8px] font-black text-blue-400 uppercase tracking-widest">Tokens Pool (x)</label>
+              <label className="block text-[8px] font-black text-blue-400 uppercase tracking-widest">Tokens Pool</label>
               <input 
                 type="number" 
                 value={roiInTokensPool} 
@@ -150,14 +155,6 @@ const App: React.FC = () => {
                 className="w-full bg-[#0b0e14] border border-blue-900/30 p-3.5 rounded-xl text-white font-mono font-bold text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all" 
               />
               <p className="text-[9px] font-mono text-slate-500 pl-1">{formatNumberWithPoints(roiInTokensPool)} tokens</p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest">Preço Inicial (Calc)</label>
-              <div className="w-full bg-slate-900/30 border border-slate-800/50 p-3.5 rounded-xl text-slate-400 font-mono font-bold text-sm">
-                {currentInitialPrice.toFixed(6)}
-              </div>
-              <p className="text-[9px] font-mono text-slate-600 pl-1">Baseado em Reservas</p>
             </div>
 
             <div className="space-y-2">
@@ -203,29 +200,39 @@ const App: React.FC = () => {
               />
               <p className="text-[9px] font-mono text-slate-500 pl-1">{formatNumberWithPoints(roiInMonthlyAddTokens)} tokens</p>
             </div>
+
+            <div className="space-y-2">
+              <label className="block text-[8px] font-black text-emerald-500 uppercase tracking-widest">Preço Inicial</label>
+              <div className="w-full bg-emerald-950/20 border border-emerald-500/30 p-3.5 rounded-xl text-emerald-400 font-mono font-bold text-sm shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+                {currentInitialPrice.toFixed(6)}
+              </div>
+              <p className="text-[9px] font-mono text-emerald-900 font-black pl-1">PONTO DE PARTIDA</p>
+            </div>
           </div>
 
+          {/* KPI RESULTS GRID */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
             <div className="bg-[#0b0e14] p-5 rounded-2xl border border-slate-800">
-              <span className="text-[9px] font-black text-slate-500 uppercase">Market Cap (FDV)</span>
-              <div className="text-xl font-black text-white">{formatUSD(roiData[12][Scenario.Neutral] * roiTotalSupply)}</div>
+              <span className="text-[9px] font-black text-slate-500 uppercase">Market Cap FDV Final</span>
+              <div className="text-xl font-black text-white">{formatUSD(finalMarketCap)}</div>
             </div>
             <div className="bg-[#0b0e14] p-5 rounded-2xl border border-slate-800">
-              <span className="text-[9px] font-black text-slate-500 uppercase">Impacto de Injeção</span>
-              <div className={`text-xl font-black ${isDiluting ? 'text-rose-500' : 'text-emerald-400'}`}>
-                {isDiluting ? '⚠️ Diluindo' : '✅ Valorizando'}
+              <span className="text-[9px] font-black text-slate-500 uppercase">Sustentabilidade</span>
+              <div className={`text-xl font-black ${isSustainable ? 'text-emerald-400' : 'text-rose-500'}`}>
+                {isSustainable ? 'Sustentável' : 'Diluição Crítica'}
               </div>
             </div>
             <div className="bg-emerald-500/10 p-5 rounded-2xl border border-emerald-500/20">
-              <span className="text-[9px] font-black text-emerald-500 uppercase">Preço Alvo (12 meses)</span>
-              <div className="text-xl font-black text-emerald-400">{formatUSD(roiData[12][Scenario.Neutral])}</div>
+              <span className="text-[9px] font-black text-emerald-500 uppercase">Preço Alvo (Mês 12)</span>
+              <div className="text-xl font-black text-emerald-400">{formatUSD(currentPriceNeutral)}</div>
             </div>
             <div className="bg-blue-500/10 p-5 rounded-2xl border border-blue-500/20">
               <span className="text-[9px] font-black text-blue-500 uppercase">ROI Estimado</span>
-              <div className="text-xl font-black text-blue-400">{(roiData[12][Scenario.Neutral] / (currentInitialPrice || 1)).toFixed(2)}x</div>
+              <div className="text-xl font-black text-blue-400">{(currentPriceNeutral / (currentInitialPrice || 1)).toFixed(2)}x</div>
             </div>
           </div>
 
+          {/* GRÁFICO INTEGRADO COM LINHA AMARELA */}
           <div className="h-[400px] w-full bg-[#0b0e14] p-6 rounded-3xl border border-slate-800 shadow-inner">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={roiData}>
@@ -239,6 +246,7 @@ const App: React.FC = () => {
                 <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontSize: '10px', fontWeight: 'bold' }}/>
                 <Line name="Otimista" type="monotone" dataKey={Scenario.Optimistic} stroke="#10b981" strokeWidth={4} dot={false} />
                 <Line name="Neutro" type="monotone" dataKey={Scenario.Neutral} stroke="#3b82f6" strokeWidth={3} dot={false} />
+                <Line name="Sustentabilidade" type="monotone" dataKey="breakEven" stroke="#facc15" strokeWidth={3} strokeDasharray="3 3" dot={false} />
                 <Line name="Pessimista" type="monotone" dataKey={Scenario.Pessimistic} stroke="#f43f5e" strokeWidth={2} dot={false} strokeDasharray="5 5" />
               </LineChart>
             </ResponsiveContainer>
@@ -261,7 +269,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-[#0b0e14]">
-      {/* SIDEBAR NAVIGATION - PRESERVADO */}
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-50
         w-72 bg-[#0b0e14] border-r border-slate-800 lg:min-h-screen p-8 
@@ -274,7 +281,7 @@ const App: React.FC = () => {
             <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center font-black text-white text-xl">S</div>
             <div>
               <h1 className="text-xl font-black text-white tracking-tighter">SUPER CRÂNIO</h1>
-              <p className="text-[8px] text-slate-500 font-black uppercase tracking-widest">Amm Engine v3.1</p>
+              <p className="text-[8px] text-slate-500 font-black uppercase tracking-widest">Amm Engine v4.0</p>
             </div>
           </div>
         </div>

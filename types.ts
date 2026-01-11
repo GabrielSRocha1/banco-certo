@@ -55,5 +55,5 @@ export interface RoiPoint {
   [Scenario.Optimistic]: number;
   [Scenario.Neutral]: number;
   [Scenario.Pessimistic]: number;
-  liquidityRatio?: number;
+  breakEven: number; // Linha Amarela - Ponto de Equilíbrio
 }
