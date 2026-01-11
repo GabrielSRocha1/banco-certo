@@ -1,154 +1,118 @@
 
 import { Scenario, RoiPoint, AppState, TokenStats, ChartDataPoint, Timeframe } from '../types';
 
+/**
+ * Calcula a Constante K de uma pool
+ */
+export const calculateConstantK = (liquidityUSD: number, tokensInPool: number): number => {
+  return Math.max(liquidityUSD, 0.001) * Math.max(tokensInPool, 0.001);
+};
+
+/**
+ * Calcula o Preço atual baseado nas reservas
+ */
+export const calculatePriceFromReserves = (liquidityUSD: number, tokensInPool: number): number => {
+  if (tokensInPool <= 0) return 0;
+  return liquidityUSD / tokensInPool;
+};
+
+/**
+ * MOTOR DE SIMULAÇÃO ROI SNIPER (AMM V2 DINÂMICO)
+ * Ordem por Semana: 1. Swap (Compradores) -> 2. Injeção (Add Liquidity) -> 3. Recalcular K
+ */
 export const calculateRoiSimulation = (
-  initialPrice: number,
-  initialLiquidity: number,
+  initialLiquidityUSD: number,
+  initialTokensInPool: number,
   monthlyUsers: number,
   averageTicket: number,
-  weeklyLiquidityAddUSD: number,
-  initialTokens: number,
-  weeklyTokenInjection: number
+  monthlyExternalLiquidityUSD: number,
+  monthlyTokenInjection: number = 0 // Novo campo de injeção de tokens
 ): RoiPoint[] => {
   const months = 12;
-  const scenarios = [
-    { type: Scenario.Optimistic, mult: 1.8 },
-    { type: Scenario.Neutral, mult: 1.0 },
-    { type: Scenario.Pessimistic, mult: 0.4 }
-  ];
+  const scenarios = [Scenario.Optimistic, Scenario.Neutral, Scenario.Pessimistic];
+  
+  const scenarioMultipliers = {
+    [Scenario.Optimistic]: 1.5,
+    [Scenario.Neutral]: 1.0,
+    [Scenario.Pessimistic]: 0.5
+  };
 
   const results: RoiPoint[] = [];
 
-  // Estados temporários para cada cenário baseado na fórmula x * y = k
-  // x = tokens na pool, y = USD na pool
-  const states = scenarios.map(s => ({
-    type: s.type,
-    x: initialTokens,
-    y: initialLiquidity,
-    mult: s.mult
-  }));
-
-  // Ponto inicial (Mês 0)
+  // Ponto inicial
+  const initialPrice = calculatePriceFromReserves(initialLiquidityUSD, initialTokensInPool);
   results.push({
-    month: 'Mês 0',
+    month: 'Início',
     [Scenario.Optimistic]: initialPrice,
     [Scenario.Neutral]: initialPrice,
     [Scenario.Pessimistic]: initialPrice,
   });
 
-  for (let m = 1; m <= months; m++) {
-    const entry: any = { month: `Mês ${m}` };
-    
-    states.forEach(state => {
-      // 1. Fluxo de capital de usuários (Compras)
-      const userFlow = (monthlyUsers * averageTicket) * state.mult;
-      
-      // Impacto de preço AMM: Usuário deposita USD, retira Tokens
-      // x_new = (x * y) / (y + userFlow)
-      const tokensBeforeBuy = state.x;
-      state.x = (tokensBeforeBuy * state.y) / (state.y + userFlow);
-      state.y += userFlow;
+  // Simulamos cada cenário de forma independente para garantir precisão
+  scenarios.forEach(s => {
+    let currentY = Math.max(initialLiquidityUSD, 1);
+    let currentX = Math.max(initialTokensInPool, 1);
+    let currentK = currentY * currentX;
+    const mult = scenarioMultipliers[s];
 
-      // 2. Injeção Manual de Liquidez (USD e Tokens)
-      const manualLiquidityUSD = weeklyLiquidityAddUSD * 4;
-      const manualTokenInjection = weeklyTokenInjection * 4;
+    // Simulação mês a mês
+    for (let m = 1; m <= months; m++) {
+      // Loop Semanal (4 semanas por mês)
+      for (let w = 1; w <= 4; w++) {
+        // FASE A: ENTRADA DE MERCADO (SWAP)
+        const weeklyVolume = ((monthlyUsers * averageTicket) / 4) * mult;
+        
+        // y_new = y + inflow
+        // x_new = k / y_new
+        currentY += weeklyVolume;
+        currentX = currentK / currentY;
+
+        // FASE B: INJEÇÃO DO DEV (ADD LIQUIDITY)
+        const weeklyUsdInj = (monthlyExternalLiquidityUSD / 4);
+        const weeklyTokenInj = (monthlyTokenInjection / 4);
+
+        currentY += weeklyUsdInj;
+        currentX += weeklyTokenInj;
+
+        // RECALCULAR K (Expansão da Pool)
+        currentK = currentY * currentX;
+      }
+
+      // Registro do preço final do mês para o gráfico
+      const monthPrice = currentY / currentX;
       
-      state.y += manualLiquidityUSD;
-      state.x += manualTokenInjection;
-      
-      // 3. Cálculo do novo preço P = y / x
-      const currentPrice = state.y / state.x;
-      entry[state.type] = currentPrice;
-    });
-    
-    results.push(entry);
-  }
+      if (!results[m]) {
+        results[m] = { month: `Mês ${m}` } as RoiPoint;
+      }
+      results[m][s] = monthPrice;
+    }
+  });
 
   return results;
 };
 
 /**
- * Calcula estatísticas realistas e histórico de tendência para o dashboard principal.
+ * Calcula estatísticas para o dashboard principal
  */
 export const calculateRealisticStats = (
   state: AppState,
   scenario: Scenario,
   timeframe: Timeframe
 ): { stats: TokenStats; history: ChartDataPoint[] } => {
-  const scenarioMult = {
-    [Scenario.Optimistic]: 1.8,
-    [Scenario.Neutral]: 1.0,
-    [Scenario.Pessimistic]: 0.4,
-  }[scenario];
-
-  const weeks = {
-    [Timeframe.Weeks4]: 4,
-    [Timeframe.Months3]: 12,
-    [Timeframe.Months6]: 24,
-  }[timeframe];
-
-  let currentPrice = state.initialPrice;
-  let currentLiquidity = state.initialLiquidityUSD;
-  let currentCirculating = state.initialCirculating;
+  const price = calculatePriceFromReserves(state.initialLiquidityUSD, state.initialCirculating * 0.1); 
   
-  // Para manter a consistência AMM no dashboard global
-  let poolTokens = currentLiquidity / currentPrice;
-
-  const history: ChartDataPoint[] = [];
-
-  // Estado inicial (Semana 0)
-  history.push({
-    week: 0,
-    price: currentPrice,
-    liquidity: currentLiquidity,
-    supply: currentCirculating,
-    marketCap: currentPrice * currentCirculating,
-  });
-
-  for (let w = 1; w <= weeks; w++) {
-    const dailyNewUsers = state.newUsersPerDay * scenarioMult;
-    const weeklyUserFlow = dailyNewUsers * 7 * state.averageTicket;
-    const manualLiqUSD = state.weeklyLiquidityAdd; 
-
-    // Compra AMM
-    poolTokens = (poolTokens * currentLiquidity) / (currentLiquidity + weeklyUserFlow);
-    currentLiquidity += weeklyUserFlow + manualLiqUSD;
-    
-    // Atualiza preço
-    currentPrice = currentLiquidity / poolTokens;
-    
-    const weeklyRelease = (state.totalSupply - state.initialCirculating) / 104;
-    currentCirculating = Math.min(state.totalSupply, currentCirculating + weeklyRelease);
-
-    history.push({
-      week: w,
-      price: currentPrice,
-      liquidity: currentLiquidity,
-      supply: currentCirculating,
-      marketCap: currentPrice * currentCirculating,
-    });
-  }
-
-  const finalMC = currentPrice * currentCirculating;
-  const liqToMc = (currentLiquidity / finalMC) * 100;
-  
-  let riskLevel: TokenStats['riskLevel'] = 'Médio';
-  if (liqToMc < 5 || state.distTeam > 30) riskLevel = 'Crítico';
-  else if (liqToMc < 10 || state.distTeam > 20) riskLevel = 'Alto';
-  else if (liqToMc > 20 && state.distTeam < 15) riskLevel = 'Baixo';
-
   const stats: TokenStats = {
-    price: currentPrice,
-    marketCap: finalMC,
-    liquidity: currentLiquidity,
-    circulatingSupply: currentCirculating,
+    price: price,
+    marketCap: price * state.totalSupply, // FDV Real
+    liquidity: state.initialLiquidityUSD,
+    circulatingSupply: state.initialCirculating,
     totalSupply: state.totalSupply,
     teamPercentage: state.distTeam,
     burnPercentage: (state.burnAmount / state.totalSupply) * 100,
-    userCount: state.currentUsers + Math.floor((state.newUsersPerDay * scenarioMult) * weeks * 7),
-    riskLevel,
-    liquidityToMcRatio: liqToMc,
+    userCount: state.currentUsers,
+    riskLevel: 'Médio',
+    liquidityToMcRatio: (state.initialLiquidityUSD / (price * state.totalSupply)) * 100,
   };
 
-  return { stats, history };
+  return { stats, history: [] };
 };
